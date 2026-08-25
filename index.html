@@ -66,7 +66,7 @@
 <body>
 
 <div class="container">
-    <h1>🤬 Bannekrukke Ultra </h1>
+    <h1>🤬 Bannekrukke Ultra</h1>
     
     <div class="card" style="text-align: center;">
         <div class="jar-lid"></div>
@@ -76,17 +76,17 @@
         </div>
         
         <select id="nameSelect">
-            <option value="Andreas"> Andreas</option>
-            <option value="Mathilde"> Mathilde</option>
-            <option value="Iben"> Iben</option>
-            <option value="Klara"> Klara</option>
+            <option value="Andreas">Andreas</option>
+            <option value="Mathilde">Mathilde</option>
+            <option value="Iben">Iben</option>
+            <option value="Klara">Klara</option>
         </select>
         <input type="text" id="wordInput" placeholder="Hvilket ord glapp ut?">
         <button class="btn-add" onclick="registerCurse()">Sleng i 50 kr! 💸</button>
     </div>
 
     <div class="card">
-        <h3> Statistikk & Analyse</h3>
+        <h3>Statistikk & Analyse</h3>
         
         <div class="tabs">
             <button class="tab active" onclick="switchTab('tab-month')">Denne måned</button>
@@ -114,19 +114,21 @@
     </div>
 
     <div class="card">
-        <h3> Deling & Synkronisering</h3>
-        <button class="btn-sync" onclick="setupSync()">1. Opprett / Synk sky-krukke</button>
-        <button class="btn-share" onclick="shareJar()">2. Del app-lenke med gjengen</button>
-        <div class="share-zone" id="shareStatus">Kjører lokalt uten sky-synk.</div>
+        <h3>Deling & Synkronisering</h3>
+        <button class="btn-sync" onclick="setupSync()">Aktiver og synkroniser appen</button>
+        <button class="btn-share" onclick="shareJar()">Del app-lenke med gjengen</button>
+        <div class="share-zone" id="shareStatus">Sjekker tilkobling...</div>
     </div>
 
     <div class="card">
-        <h3> Siste 5 hendelser (Gjeldende år)</h3>
+        <h3>Siste 5 hendelser (Gjeldende år)</h3>
         <ul class="log-list" id="logList"></ul>
     </div>
 </div>
 
 <script>
+    // Genererer en fast ID basert på domenenavnet deres, slik at dere automatisk havner i samme krukke!
+    let defaultJarName = "krukke_" + window.location.hostname.replace(/[^a-zA-Z0-9]/g, "");
     let jarId = "";
     let localData = { logs: [] };
     const kvdbUrl = "https://kvdb.io"; 
@@ -138,12 +140,13 @@
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('jar')) {
             jarId = urlParams.get('jar');
-            document.getElementById('shareStatus').innerText = "Tilkoblet krukke: " + jarId;
-            fetchData();
-            setInterval(fetchData, 4000); 
         } else {
-            updateUI();
+            jarId = defaultJarName; // Setter automatisk felles ID
         }
+        
+        document.getElementById('shareStatus').innerText = "Tilkoblet krukke: " + jarId;
+        fetchData();
+        setInterval(fetchData, 4000); 
     }
 
     function switchTab(tabId) {
@@ -153,17 +156,11 @@
         document.getElementById(tabId).classList.add('active');
     }
 
-    // Hjelpefunksjon for å finne favorittordet til en person fra en liste med logger
     function getFavoriteWord(userLogs, username) {
         let filtered = userLogs.filter(l => l.user === username && l.text && l.text.toLowerCase() !== "banning");
-        if(filtered.length === 0) return "Ingen spesifikke ord registrert";
-        
+        if(filtered.length === 0) return "Ingen ord registrert";
         let counts = {};
-        filtered.forEach(l => {
-            let w = l.text.trim();
-            counts[w] = (counts[w] || 0) + 1;
-        });
-        
+        filtered.forEach(l => { let w = l.text.trim(); counts[w] = (counts[w] || 0) + 1; });
         return Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b) + ` (${counts[Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b)]}stk)`;
     }
 
@@ -179,5 +176,3 @@
         document.getElementById('jarFill').style.height = fillPercent + "%";
         
         const logList = document.getElementById('logList');
-        logList.innerHTML = "";
-        if(currentYearLogs.length === 0) {
