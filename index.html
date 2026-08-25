@@ -33,7 +33,7 @@
 </head>
 <body>
 
-<!-- Eksternt lydspor for Homer Simpson D'oh -->
+<!-- Forhåndslasting av eksternt lydspor -->
 <audio id="dohAudio" preload="auto">
     <source src="https://soundboard.com" type="audio/mpeg">
 </audio>
@@ -87,12 +87,17 @@
     
     var localData = { logs: [] };
 
-    // Hent lokale lagrede data med en gang
+    // Gjenopprett data fra lokalminnet med en gang
     try {
         var lagret = localStorage.getItem('bannekrukke_sky_data');
         if (lagret) localData = JSON.parse(lagret);
     } catch(e) {}
     if (!localData || !localData.logs) localData = { logs: [] };
+
+    function genererUnikNokkel(loggInnslag, indeks) {
+        if (loggInnslag.id) return loggInnslag.id;
+        return new Date(loggInnslag.time).getTime() + "_" + loggInnslag.user + "_" + indeks;
+    }
 
     function beregnTopp3Ord(navn) {
         try {
@@ -103,11 +108,14 @@
 
             var teller = {};
             personLogs.forEach(function(l) {
-                var ord = l.text.trim();
-                teller[ord] = (teller[ord] || 0) + 1;
+                var ord = l.text.trim().toLowerCase();
+                if (ord) teller[ord] = (teller[ord] || 0) + 1;
             });
 
-            var sortert = Object.keys(teller).map(function(ord) {
+            var nokler = Object.keys(teller);
+            if (nokler.length === 0) return "Ingen ord registrert ennå";
+
+            var sortert = nokler.map(function(ord) {
                 return { ord: ord, antall: teller[ord] };
             }).sort(function(a, b) { return b.antall - a.antall; });
 
@@ -124,18 +132,18 @@
     function updateUI() {
         try {
             var currentYear = new Date().getFullYear();
-            var åretsLogs = localData.logs.filter(function(log) {
+            var activeLogs = localData.logs.filter(function(log) {
                 return new Date(log.time).getFullYear() === currentYear;
             });
-
-            var totalt = åretsLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
-            document.getElementById('totalDisplay').innerText = totalt + " kr";
             
-            var prosent = Math.min((totalt / 2000) * 100, 100);
-            document.getElementById('jarFill').style.height = prosent + "%";
-
+            var yearlyTotal = activeLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
+            document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
+            
+            var fillPercent = Math.min((yearlyTotal / 2000) * 100, 100);
+            document.getElementById('jarFill').style.height = fillPercent + "%";
+            
             var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
-            åretsLogs.forEach(function(log) {
+            activeLogs.forEach(function(log) {
                 if (summer[log.user] !== undefined) summer[log.user] += log.amount;
             });
 
@@ -153,31 +161,27 @@
             });
             document.getElementById('statsContainer').innerHTML = statsHtml;
 
-            var logHtml = "";
-            if (åretsLogs.length === 0) {
-                logHtml = "<li>Krukken venter på første synd...</li>";
+            var logList = document.getElementById('logList');
+            logList.innerHTML = "";
+            if (activeLogs.length === 0) {
+                logList.innerHTML = "<li>Krukken venter på første synd...</li>";
             } else {
-                åretsLogs.slice().reverse().slice(0, 5).forEach(function(log) {
-                    logHtml += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span><strong>50 kr</strong></li>";
+                activeLogs.slice().reverse().slice(0, 5).forEach(function(log) {
+                    logList.innerHTML += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span> <strong>50 kr</strong></li>";
                 });
             }
-            document.getElementById('logList').innerHTML = logHtml;
         } catch(e) {
             console.error("UI-oppdatering feilet:", e);
         }
     }
 
     function leggTilBot() {
-        try {
-            var lyd = document.getElementById('dohAudio');
-            if (lyd) { lyd.currentTime = 0; lyd.play(); }
-        } catch(audioErr) {}
-
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
         var tidsstempel = new Date().toISOString();
+        var unikId = tidsstempel + "_" + valgtNavn + "_" + Math.floor(Math.random() * 10000);
         
-        var nyLogg = { user: valgtNavn, text: ordet, amount: PENALTY, time: tidsstempel };
+        var nyLogg = { id: unikId, user: valgtNavn, text: ordet, amount: PENALTY, time: tidsstempel };
         localData.logs.push(nyLogg);
         
         try { localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData)); } catch(e) {}
@@ -185,6 +189,11 @@
         document.getElementById('wordInput').value = "";
         updateUI();
         saveToCloud();
+
+        try {
+            var lyd = document.getElementById('dohAudio');
+            if (lyd) { lyd.currentTime = 0; lyd.play(); }
+        } catch(audioErr) {}
     }
 
     function saveToCloud() {
@@ -196,17 +205,3 @@
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
                 }
-            };
-            xhr.send(JSON.stringify(localData));
-        } catch(e) {}
-    }
-
-    function fetchData() {
-        try {
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", kvdbUrl, true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    try {
-                        var cloudData = JSON.parse(xhr.responseText);
-                        if (cloudData && cloudData.logs) {
