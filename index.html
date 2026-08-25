@@ -39,7 +39,6 @@
         button:active { transform: scale(0.97); }
         .btn-add { background: var(--accent); color: #fff; margin-top: 5px; }
         .btn-share { background: #4a4a4a; color: #fff; }
-        .btn-sync { background: #2196F3; color: #fff; }
         .btn-email { background: var(--success); color: #fff; }
         
         .tabs { display: flex; gap: 5px; margin-bottom: 15px; background: #222; padding: 4px; border-radius: 8px; }
@@ -89,10 +88,10 @@
         <h3>Statistikk & Analyse</h3>
         
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('tab-month')">Denne måned</button>
-            <button class="tab" onclick="switchTab('tab-names')">Per person</button>
-            <button class="tab" onclick="switchTab('tab-history')">Historikk</button>
-            <button class="tab" onclick="switchTab('tab-year')">Årsrapport</button>
+            <button class="tab active" onclick="switchTab('tab-month', event)">Denne måned</button>
+            <button class="tab" onclick="switchTab('tab-names', event)">Per person</button>
+            <button class="tab" onclick="switchTab('tab-history', event)">Historikk</button>
+            <button class="tab" onclick="switchTab('tab-year', event)">Årsrapport</button>
         </div>
 
         <div id="tab-month" class="tab-content active">
@@ -114,10 +113,9 @@
     </div>
 
     <div class="card">
-        <h3>Deling & Synkronisering</h3>
-        <button class="btn-sync" onclick="setupSync()">Aktiver og synkroniser appen</button>
-        <button class="btn-share" onclick="shareJar()">Del app-lenke med gjengen</button>
-        <div class="share-zone" id="shareStatus">Sjekker tilkobling...</div>
+        <h3>Deling & Status</h3>
+        <button class="btn-share" onclick="shareJar()">Del denne app-lenken med gjengen</button>
+        <div class="share-zone" id="shareStatus">Initialiserer...</div>
     </div>
 
     <div class="card">
@@ -127,9 +125,7 @@
 </div>
 
 <script>
-    // Genererer en fast ID basert på domenenavnet deres, slik at dere automatisk havner i samme krukke!
-    let defaultJarName = "krukke_" + window.location.hostname.replace(/[^a-zA-Z0-9]/g, "");
-    let jarId = "";
+    let jarId = "krukke_felles_gjeng"; 
     let localData = { logs: [] };
     const kvdbUrl = "https://kvdb.io"; 
     const PENALTY = 50;
@@ -137,22 +133,31 @@
     const FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
 
     window.onload = function() {
+        // Last inn lokale data først så appen fungerer UANSETT nettstatus
+        let saved = localStorage.getItem('bannekrukke_data');
+        if(saved) {
+            try { localData = JSON.parse(saved); } catch(e) { localData = { logs: [] }; }
+        }
+        
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('jar')) {
             jarId = urlParams.get('jar');
-        } else {
-            jarId = defaultJarName; // Setter automatisk felles ID
+        } else if (window.location.hostname) {
+            jarId = "krukke_" + window.location.hostname.replace(/[^a-zA-Z0-9]/g, "");
         }
         
-        document.getElementById('shareStatus').innerText = "Tilkoblet krukke: " + jarId;
+        document.getElementById('shareStatus').innerText = "Modus: Aktiv krukke (" + jarId + ")";
+        updateUI();
+        
+        // Start synkronisering i bakgrunnen
         fetchData();
-        setInterval(fetchData, 4000); 
+        setInterval(fetchData, 5000); 
     }
 
-    function switchTab(tabId) {
+    function switchTab(tabId, e) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        event.currentTarget.classList.add('active');
+        e.currentTarget.classList.add('active');
         document.getElementById(tabId).classList.add('active');
     }
 
@@ -165,6 +170,8 @@
     }
 
     function updateUI() {
+        if(!localData || !localData.logs) localData = { logs: [] };
+        
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth();
 
@@ -172,7 +179,3 @@
         let yearlyTotal = currentYearLogs.reduce((sum, log) => sum + log.amount, 0);
         document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
         
-        let fillPercent = Math.min((yearlyTotal / 2000) * 100, 100);
-        document.getElementById('jarFill').style.height = fillPercent + "%";
-        
-        const logList = document.getElementById('logList');
