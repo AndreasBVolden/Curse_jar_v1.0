@@ -74,16 +74,19 @@
 </div>
 
 <script>
-    // Sky-konfigurasjon dedikert for din felleskrukke
+    // Sky-konfigurasjon og lydfil
     var jarId = "felles_krukke_andreas_volden_2026";
     var kvdbUrl = "https://kvdb.io" + jarId;
     var PENALTY = 50;
     var TARGET_EMAIL = "andreasbvolden@gmail.com";
     var FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
     
+    // Homer Simpson "D'oh!" Lydfil hentet fra et åpent, stabilt lydarkiv
+    var dohAudio = new Audio("https://soundboard.com");
+    dohAudio.preload = "auto";
+
     var localData = { logs: [] };
 
-    // Hent lokale data umiddelbart
     try {
         var lagret = localStorage.getItem('bannekrukke_sky_data');
         if (lagret) localData = JSON.parse(lagret);
@@ -156,6 +159,12 @@
     }
 
     function leggTilBot() {
+        // Spill av lyden umiddelbart ved klikk
+        try {
+            dohAudio.currentTime = 0;
+            dohAudio.play();
+        } catch(audioErr) { console.error("Lyd avspilling blokkert av enhet:", audioErr); }
+
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
         var tidsstempel = new Date().toISOString();
@@ -167,10 +176,9 @@
 
         document.getElementById('wordInput').value = "";
         updateUI();
-        saveToCloud(); // Sender til skyen med en gang
+        saveToCloud();
     }
 
-    // FEILSIKKER TEKST-SENDING: Sender alt som ren tekststreng for å unngå nettlesersperrer
     function saveToCloud() {
         try {
             var xhr = new XMLHttpRequest();
@@ -194,11 +202,6 @@
                     try {
                         var cloudData = JSON.parse(xhr.responseText);
                         if (cloudData && cloudData.logs) {
-                            // Fletter data basert på unike tidsstempler så ingen trykk slettes
                             var kart = new Map(localData.logs.map(function(l) { return [l.time + l.user, l]; }));
                             cloudData.logs.forEach(function(l) { kart.set(l.time + l.user, l); });
-                            
-                            localData.logs = Array.from(kart.values()).sort(function(a,b) { 
-                                return new Date(a.time) - new Date(b.time); 
-                            });
                             
