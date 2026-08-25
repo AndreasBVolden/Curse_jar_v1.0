@@ -114,7 +114,7 @@
     <div class="card">
         <h3>Deling & Status</h3>
         <button class="btn-share" id="shareBtn">Del denne app-lenke med gjengen</button>
-        <div class="share-zone" id="shareStatus">Starter applikasjonen...</div>
+        <div class="share-zone" id="shareStatus">Venter på start...</div>
     </div>
 
     <div class="card">
@@ -124,8 +124,7 @@
 </div>
 
 <script>
-try {
-    // Globale variabler
+    // Konfigurasjon og variabler defineres først
     let jarId = "krukke_felles_gjeng";
     let localData = { logs: [] };
     const kvdbUrl = "https://kvdb.io"; 
@@ -133,43 +132,7 @@ try {
     const TARGET_EMAIL = "andreasbvolden@gmail.com";
     const FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
 
-    // Hent lokale data trygt
-    try {
-        let saved = localStorage.getItem('bannekrukke_data');
-        if (saved) localData = JSON.parse(saved);
-    } catch(e) { console.error(e); }
-    
-    if (!localData || !localData.logs) localData = { logs: [] };
-
-    // Bestem felles Krukke-ID
-    if (window.location.search) {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('jar')) jarId = urlParams.get('jar');
-    } else if (window.location.hostname && window.location.hostname !== "localhost") {
-        jarId = "krukke_" + window.location.hostname.replace(/[^a-zA-Z0-9]/g, "");
-    }
-
-    // Kjør oppsettet med en gang (siden HTML-elementene over allerede er ferdig lastet)
-    document.getElementById('addBtn').onclick = registerCurse;
-    document.getElementById('shareBtn').onclick = shareJar;
-    document.getElementById('emailBtn').onclick = sendYearlyReport;
-    
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.onclick = function() {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            this.classList.add('active');
-            document.getElementById(this.getAttribute('data-target')).classList.add('active');
-        };
-    });
-
-    document.getElementById('shareStatus').innerText = "Modus: Aktiv krukke (" + jarId + ")";
-    updateUI();
-    
-    // Start sky-synk
-    fetchData();
-    setInterval(fetchData, 5000);
-
+    // Definer alle funksjonene før de brukes
     function getFavoriteWord(userLogs, username) {
         let filtered = userLogs.filter(l => l.user === username && l.text && l.text.toLowerCase() !== "banning");
         if(filtered.length === 0) return "Ingen ord registrert";
@@ -188,3 +151,29 @@ try {
         document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
         
         let fillPercent = Math.min((yearlyTotal / 2000) * 100, 100);
+        document.getElementById('jarFill').style.height = fillPercent + "%";
+        
+        const logList = document.getElementById('logList');
+        logList.innerHTML = "";
+        if(currentYearLogs.length === 0) {
+            logList.innerHTML = "<li>Krukken venter på første synd...</li>";
+        } else {
+            currentYearLogs.slice().reverse().slice(0, 5).forEach(log => {
+                logList.innerHTML += `<li><span><strong>${log.user}</strong>: ${log.text}</span><strong>${log.amount} kr</strong></li>`;
+            });
+        }
+
+        generateMonthStats(currentYearLogs, currentMonth, currentYear);
+        generateNameStats();
+        generateHistoryStats();
+        generateYearlySummary(currentYearLogs, currentYear);
+    }
+
+    function generateMonthStats(yearLogs, currentMonth, currentYear) {
+        const container = document.getElementById('monthStatsContainer');
+        const monthNames = ["Januar", "Februar", "Mars", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Desember"];
+        let monthLogs = yearLogs.filter(log => new Date(log.time).getMonth() === currentMonth);
+        let totals = { "Andreas": 0, "Mathilde": 0, "Iben": 0, "Klara": 0 };
+        monthLogs.forEach(log => { if(totals[log.user] !== undefined) totals[log.user] += log.amount; });
+        let html = `<p style="font-size:13px; color:#aaa; margin-bottom:10px; text-align:center;">Status for ${monthNames[currentMonth]} ${currentYear}:</p>`;
+        let max = Math.max(...Object.values(totals), 1);
