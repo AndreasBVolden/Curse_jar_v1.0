@@ -86,6 +86,7 @@
     var FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
     
     var localData = { logs: [] };
+    var isSyncing = false;
 
     // Gjenopprett data fra lokalminnet med en gang
     try {
@@ -94,9 +95,9 @@
     } catch(e) {}
     if (!localData || !localData.logs) localData = { logs: [] };
 
-    function genererUnikNokkel(loggInnslag, indeks) {
+    function genererUnikNokkel(loggInnslag) {
         if (loggInnslag.id) return loggInnslag.id;
-        return new Date(loggInnslag.time).getTime() + "_" + loggInnslag.user + "_" + indeks;
+        return new Date(loggInnslag.time).getTime() + "_" + loggInnslag.user;
     }
 
     function beregnTopp3Ord(navn) {
