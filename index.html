@@ -33,7 +33,7 @@
 </head>
 <body>
 
-<!-- Trygg forhåndslasting av lyd via standard HTML -->
+<!-- Eksternt lydspor for Homer Simpson D'oh -->
 <audio id="dohAudio" preload="auto">
     <source src="https://soundboard.com" type="audio/mpeg">
 </audio>
@@ -67,7 +67,7 @@
         <h3>🔗 Deling & Status</h3>
         <button class="btn-share" id="shareBtn">Del felles app-lenke 🔗</button>
         <button class="btn-email" id="emailBtn">Send årsrapport til e-post 📧</button>
-        <div class="share-zone" id="shareStatus">Initialiserer...</div>
+        <div class="share-zone" id="shareStatus">Klargjør applikasjonen...</div>
     </div>
 
     <div class="card">
@@ -87,6 +87,7 @@
     
     var localData = { logs: [] };
 
+    // Hent lokale lagrede data med en gang
     try {
         var lagret = localStorage.getItem('bannekrukke_sky_data');
         if (lagret) localData = JSON.parse(lagret);
@@ -94,78 +95,82 @@
     if (!localData || !localData.logs) localData = { logs: [] };
 
     function beregnTopp3Ord(navn) {
-        var personLogs = localData.logs.filter(function(l) {
-            return l.user === navn && l.text && l.text.toLowerCase() !== "banning";
-        });
-        if (personLogs.length === 0) return "Ingen ord registrert ennå";
+        try {
+            var personLogs = localData.logs.filter(function(l) {
+                return l.user === navn && l.text && l.text.toLowerCase() !== "banning";
+            });
+            if (personLogs.length === 0) return "Ingen ord registrert ennå";
 
-        var teller = {};
-        personLogs.forEach(function(l) {
-            var ord = l.text.trim();
-            teller[ord] = (teller[ord] || 0) + 1;
-        });
+            var teller = {};
+            personLogs.forEach(function(l) {
+                var ord = l.text.trim();
+                teller[ord] = (teller[ord] || 0) + 1;
+            });
 
-        var sortert = Object.keys(teller).map(function(ord) {
-            return { ord: ord, antall: teller[ord] };
-        }).sort(function(a, b) { return b.antall - a.antall; });
+            var sortert = Object.keys(teller).map(function(ord) {
+                return { ord: ord, antall: teller[ord] };
+            }).sort(function(a, b) { return b.antall - a.antall; });
 
-        var topp3 = sortert.slice(0, 3).map(function(item) {
-            return item.ord + " (" + item.antall + "x)";
-        });
+            var topp3 = sortert.slice(0, 3).map(function(item) {
+                return item.ord + " (" + item.antall + "x)";
+            });
 
-        return "🔥 Topp 3 ord: " + topp3.join(", ");
+            return "🔥 Topp 3 ord: " + topp3.join(", ");
+        } catch(e) {
+            return "Ingen ord registrert ennå";
+        }
     }
 
     function updateUI() {
-        var currentYear = new Date().getFullYear();
-        var åretsLogs = localData.logs.filter(function(log) {
-            return new Date(log.time).getFullYear() === currentYear;
-        });
-
-        var totalt = åretsLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
-        document.getElementById('totalDisplay').innerText = totalt + " kr";
-        
-        var prosent = Math.min((totalt / 2000) * 100, 100);
-        document.getElementById('jarFill').style.height = prosent + "%";
-
-        var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
-        åretsLogs.forEach(function(log) {
-            if (summer[log.user] !== undefined) summer[log.user] += log.amount;
-        });
-
-        var maksBelop = Math.max(summer.Andreas, summer.Mathilde, summer.Iben, summer.Klara, 1);
-        var statsHtml = "";
-        
-        FIXED_NAMES.forEach(function(name) {
-            var p = (summer[name] / maksBelop) * 100;
-            var topp3Ord = beregnTopp3Ord(name);
-            statsHtml += '<div class="stats-row">' +
-                '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
-                '<div class="bar-container"><div class="bar-fill" style="width: ' + p + '%"></div></div>' +
-                '<div class="top-words">' + topp3Ord + '</div>' +
-                '</div>';
-        });
-        document.getElementById('statsContainer').innerHTML = statsHtml;
-
-        var logHtml = "";
-        if (åretsLogs.length === 0) {
-            logHtml = "<li>Krukken venter på første synd...</li>";
-        } else {
-            åretsLogs.slice().reverse().slice(0, 5).forEach(function(log) {
-                logHtml += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span><strong>50 kr</strong></li>";
+        try {
+            var currentYear = new Date().getFullYear();
+            var åretsLogs = localData.logs.filter(function(log) {
+                return new Date(log.time).getFullYear() === currentYear;
             });
+
+            var totalt = åretsLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
+            document.getElementById('totalDisplay').innerText = totalt + " kr";
+            
+            var prosent = Math.min((totalt / 2000) * 100, 100);
+            document.getElementById('jarFill').style.height = prosent + "%";
+
+            var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
+            åretsLogs.forEach(function(log) {
+                if (summer[log.user] !== undefined) summer[log.user] += log.amount;
+            });
+
+            var maksBelop = Math.max(summer.Andreas, summer.Mathilde, summer.Iben, summer.Klara, 1);
+            var statsHtml = "";
+            
+            FIXED_NAMES.forEach(function(name) {
+                var p = (summer[name] / maksBelop) * 100;
+                var topp3Ord = beregnTopp3Ord(name);
+                statsHtml += '<div class="stats-row">' +
+                    '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
+                    '<div class="bar-container"><div class="bar-fill" style="width: ' + p + '%"></div></div>' +
+                    '<div class="top-words">' + topp3Ord + '</div>' +
+                    '</div>';
+            });
+            document.getElementById('statsContainer').innerHTML = statsHtml;
+
+            var logHtml = "";
+            if (åretsLogs.length === 0) {
+                logHtml = "<li>Krukken venter på første synd...</li>";
+            } else {
+                åretsLogs.slice().reverse().slice(0, 5).forEach(function(log) {
+                    logHtml += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span><strong>50 kr</strong></li>";
+                });
+            }
+            document.getElementById('logList').innerHTML = logHtml;
+        } catch(e) {
+            console.error("UI-oppdatering feilet:", e);
         }
-        document.getElementById('logList').innerHTML = logHtml;
     }
 
     function leggTilBot() {
-        // Spill av lyden trygt via HTML-elementet
         try {
             var lyd = document.getElementById('dohAudio');
-            if (lyd) {
-                lyd.currentTime = 0;
-                lyd.play();
-            }
+            if (lyd) { lyd.currentTime = 0; lyd.play(); }
         } catch(audioErr) {}
 
         var valgtNavn = document.getElementById('nameSelect').value;
@@ -205,7 +210,3 @@
                     try {
                         var cloudData = JSON.parse(xhr.responseText);
                         if (cloudData && cloudData.logs) {
-                            var kart = new Map(localData.logs.map(function(l) { return [l.time + l.user, l]; }));
-                            cloudData.logs.forEach(function(l) { kart.set(l.time + l.user, l); });
-                            localData.logs = Array.from(kart.values()).sort(function(a,b) { 
-                                return new Date(a.time) - new Date(b.time); 
