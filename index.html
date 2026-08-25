@@ -114,7 +114,7 @@
     <div class="card">
         <h3>Deling & Status</h3>
         <button class="btn-share" id="shareBtn">Del denne app-lenke med gjengen</button>
-        <div class="share-zone" id="shareStatus">Starter opp...</div>
+        <div class="share-zone" id="shareStatus">Starter applikasjonen...</div>
     </div>
 
     <div class="card">
@@ -124,7 +124,8 @@
 </div>
 
 <script>
-    // Konfigurasjon
+try {
+    // Globale variabler
     let jarId = "krukke_felles_gjeng";
     let localData = { logs: [] };
     const kvdbUrl = "https://kvdb.io"; 
@@ -132,20 +133,15 @@
     const TARGET_EMAIL = "andreasbvolden@gmail.com";
     const FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
 
-    // 1. Initialisering ved oppstart
+    // Hent lokale data trygt
     try {
         let saved = localStorage.getItem('bannekrukke_data');
-        if (saved) {
-            localData = JSON.parse(saved);
-        }
-    } catch(e) {
-        localData = { logs: [] };
-    }
-    if (!localData || !localData.logs) {
-        localData = { logs: [] };
-    }
+        if (saved) localData = JSON.parse(saved);
+    } catch(e) { console.error(e); }
+    
+    if (!localData || !localData.logs) localData = { logs: [] };
 
-    // Bestem felles Krukke ID basert på nettadresse eller standard
+    // Bestem felles Krukke-ID
     if (window.location.search) {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('jar')) jarId = urlParams.get('jar');
@@ -153,38 +149,42 @@
         jarId = "krukke_" + window.location.hostname.replace(/[^a-zA-Z0-9]/g, "");
     }
 
-    // Sett opp klikk-lyttere i JavaScript i stedet for i HTML (mye sikrere mot krasj)
-    document.addEventListener("DOMContentLoaded", function() {
-        document.getElementById('addBtn').addEventListener('click', registerCurse);
-        document.getElementById('shareBtn').addEventListener('click', shareJar);
-        document.getElementById('emailBtn').addEventListener('click', sendYearlyReport);
-        
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', function() {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                this.classList.add('active');
-                document.getElementById(this.getAttribute('data-target')).classList.add('active');
-            });
-        });
-
-        document.getElementById('shareStatus').innerText = "Modus: Aktiv krukke (" + jarId + ")";
-        updateUI();
-        
-        // Start bakgrunns-synkronisering mot skyen
-        fetchData();
-        setInterval(fetchData, 5000);
+    // Kjør oppsettet med en gang (siden HTML-elementene over allerede er ferdig lastet)
+    document.getElementById('addBtn').onclick = registerCurse;
+    document.getElementById('shareBtn').onclick = shareJar;
+    document.getElementById('emailBtn').onclick = sendYearlyReport;
+    
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.onclick = function() {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById(this.getAttribute('data-target')).classList.add('active');
+        };
     });
+
+    document.getElementById('shareStatus').innerText = "Modus: Aktiv krukke (" + jarId + ")";
+    updateUI();
+    
+    // Start sky-synk
+    fetchData();
+    setInterval(fetchData, 5000);
 
     function getFavoriteWord(userLogs, username) {
         let filtered = userLogs.filter(l => l.user === username && l.text && l.text.toLowerCase() !== "banning");
         if(filtered.length === 0) return "Ingen ord registrert";
         let counts = {};
         filtered.forEach(l => { let w = l.text.trim(); counts[w] = (counts[w] || 0) + 1; });
-        return Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b) + ` (${counts[Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b)]} stk)`;
+        let topWord = Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b);
+        return topWord + ` (${counts[topWord]} stk)`;
     }
 
     function updateUI() {
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth();
 
+        const currentYearLogs = localData.logs.filter(log => new Date(log.time).getFullYear() === currentYear);
+        let yearlyTotal = currentYearLogs.reduce((sum, log) => sum + log.amount, 0);
+        document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
+        
+        let fillPercent = Math.min((yearlyTotal / 2000) * 100, 100);
