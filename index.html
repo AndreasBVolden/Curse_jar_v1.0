@@ -97,7 +97,6 @@
 
     function genererUnikNokkel(loggInnslag) {
         if (loggInnslag.id) return loggInnslag.id;
-        // Feilsikker global nøkkelgenerering som er helt uavhengig av array-indekser
         return new Date(loggInnslag.time || Date.now()).getTime() + "_" + loggInnslag.user + "_" + Math.floor(Math.random() * 1000);
     }
 
@@ -204,3 +203,4 @@
             xhr.open("POST", kvdbUrl, true);
             xhr.setRequestHeader("Content-Type", "text/plain");
             xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
