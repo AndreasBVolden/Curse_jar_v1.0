@@ -100,6 +100,7 @@
         return new Date(loggInnslag.time).getTime() + "_" + loggInnslag.user;
     }
 
+    // Finn de 3 mest brukte ordene for en person
     function beregnTopp3Ord(navn) {
         try {
             var personLogs = localData.logs.filter(function(l) {
@@ -130,6 +131,7 @@
         }
     }
 
+    // Tegn opp hele grensesnittet
     function updateUI() {
         try {
             var currentYear = new Date().getFullYear();
@@ -168,6 +170,7 @@
                 logList.innerHTML = "<li>Krukken venter på første synd...</li>";
             } else {
                 activeLogs.slice().reverse().slice(0, 5).forEach(function(log) {
+                    // Korrigert HTML-struktur uten løse avslutningstagger
                     logList.innerHTML += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span> <strong>50 kr</strong></li>";
                 });
             }
@@ -176,6 +179,7 @@
         }
     }
 
+    // Registrer ny bot lokalt og trigg sky-opplasting
     function leggTilBot() {
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
@@ -197,12 +201,8 @@
         } catch(audioErr) {}
     }
 
+    // Send data opp til sky-serveren
     function saveToCloud() {
         try {
             var xhr = new XMLHttpRequest();
             xhr.open("POST", kvdbUrl, true);
-            xhr.setRequestHeader("Content-Type", "text/plain");
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
-                }
