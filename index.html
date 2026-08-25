@@ -33,6 +33,11 @@
 </head>
 <body>
 
+<!-- Trygg forhåndslasting av lyd via standard HTML -->
+<audio id="dohAudio" preload="auto">
+    <source src="https://soundboard.com" type="audio/mpeg">
+</audio>
+
 <div class="container">
     <h1>🤬 Bannekrukke Ultra</h1>
     
@@ -50,7 +55,7 @@
             <option value="Klara">Klara</option>
         </select>
         <input type="text" id="wordInput" placeholder="Hvilket ord glapp ut?">
-        <button class="btn-add" id="addBtn" onclick="leggTilBot()">Sleng i 50 kr! 💸</button>
+        <button class="btn-add" id="addBtn">Sleng i 50 kr! 💸</button>
     </div>
 
     <div class="card">
@@ -60,9 +65,9 @@
 
     <div class="card">
         <h3>🔗 Deling & Status</h3>
-        <button class="btn-share" onclick="delAppLenke()">Del felles app-lenke 🔗</button>
-        <button class="btn-email" onclick="sendEpostRapport()">Send årsrapport til e-post 📧</button>
-        <div class="share-zone" id="shareStatus">Starter synkronisering...</div>
+        <button class="btn-share" id="shareBtn">Del felles app-lenke 🔗</button>
+        <button class="btn-email" id="emailBtn">Send årsrapport til e-post 📧</button>
+        <div class="share-zone" id="shareStatus">Initialiserer...</div>
     </div>
 
     <div class="card">
@@ -74,17 +79,12 @@
 </div>
 
 <script>
-    // Sky-konfigurasjon og lydfil
     var jarId = "felles_krukke_andreas_volden_2026";
     var kvdbUrl = "https://kvdb.io" + jarId;
     var PENALTY = 50;
     var TARGET_EMAIL = "andreasbvolden@gmail.com";
     var FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
     
-    // Homer Simpson "D'oh!" Lydfil hentet fra et åpent, stabilt lydarkiv
-    var dohAudio = new Audio("https://soundboard.com");
-    dohAudio.preload = "auto";
-
     var localData = { logs: [] };
 
     try {
@@ -159,11 +159,14 @@
     }
 
     function leggTilBot() {
-        // Spill av lyden umiddelbart ved klikk
+        // Spill av lyden trygt via HTML-elementet
         try {
-            dohAudio.currentTime = 0;
-            dohAudio.play();
-        } catch(audioErr) { console.error("Lyd avspilling blokkert av enhet:", audioErr); }
+            var lyd = document.getElementById('dohAudio');
+            if (lyd) {
+                lyd.currentTime = 0;
+                lyd.play();
+            }
+        } catch(audioErr) {}
 
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
@@ -204,4 +207,5 @@
                         if (cloudData && cloudData.logs) {
                             var kart = new Map(localData.logs.map(function(l) { return [l.time + l.user, l]; }));
                             cloudData.logs.forEach(function(l) { kart.set(l.time + l.user, l); });
-                            
+                            localData.logs = Array.from(kart.values()).sort(function(a,b) { 
+                                return new Date(a.time) - new Date(b.time); 
