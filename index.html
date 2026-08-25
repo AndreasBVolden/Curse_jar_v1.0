@@ -112,9 +112,10 @@
     </div>
 
     <div class="card">
-        <h3>Deling & Status</h3>
-        <button class="btn-share" id="shareBtn">Del denne app-lenke med gjengen</button>
-        <div class="share-zone" id="shareStatus">Venter på start...</div>
+        <h3>Deling & Synkronisering</h3>
+        <button class="btn-share" id="importBtn" style="background:#2196F3;">Importer data fra gjengen 📥</button>
+        <button class="btn-share" id="shareBtn">Eksporter/Del dine data ut 📤</button>
+        <div class="share-zone" id="shareStatus">Initialiserer appen...</div>
     </div>
 
     <div class="card">
@@ -124,15 +125,11 @@
 </div>
 
 <script>
-    // Konfigurasjon og variabler defineres først
-    let jarId = "krukke_felles_gjeng";
     let localData = { logs: [] };
-    const kvdbUrl = "https://kvdb.io"; 
     const PENALTY = 50;
     const TARGET_EMAIL = "andreasbvolden@gmail.com";
     const FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
 
-    // Definer alle funksjonene før de brukes
     function getFavoriteWord(userLogs, username) {
         let filtered = userLogs.filter(l => l.user === username && l.text && l.text.toLowerCase() !== "banning");
         if(filtered.length === 0) return "Ingen ord registrert";
@@ -177,3 +174,5 @@
         monthLogs.forEach(log => { if(totals[log.user] !== undefined) totals[log.user] += log.amount; });
         let html = `<p style="font-size:13px; color:#aaa; margin-bottom:10px; text-align:center;">Status for ${monthNames[currentMonth]} ${currentYear}:</p>`;
         let max = Math.max(...Object.values(totals), 1);
+        FIXED_NAMES.forEach(name => {
+            let pct = (totals[name] / max) * 100;
