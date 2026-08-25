@@ -33,7 +33,7 @@
 </head>
 <body>
 
-<!-- Forhåndslasting av eksternt lydspor -->
+<!-- Trygg forhåndslasting av Homer Simpson lydspor -->
 <audio id="dohAudio" preload="auto">
     <source src="https://soundboard.com" type="audio/mpeg">
 </audio>
@@ -88,7 +88,7 @@
     var localData = { logs: [] };
     var isSyncing = false;
 
-    // Gjenopprett data fra lokalminnet med en gang
+    // Gjenopprett lokale data fra minnet øyeblikkelig
     try {
         var lagret = localStorage.getItem('bannekrukke_sky_data');
         if (lagret) localData = JSON.parse(lagret);
@@ -97,10 +97,10 @@
 
     function genererUnikNokkel(loggInnslag) {
         if (loggInnslag.id) return loggInnslag.id;
-        return new Date(loggInnslag.time).getTime() + "_" + loggInnslag.user;
+        // Feilsikker global nøkkelgenerering som er helt uavhengig av array-indekser
+        return new Date(loggInnslag.time || Date.now()).getTime() + "_" + loggInnslag.user + "_" + Math.floor(Math.random() * 1000);
     }
 
-    // Finn de 3 mest brukte ordene for en person
     function beregnTopp3Ord(navn) {
         try {
             var personLogs = localData.logs.filter(function(l) {
@@ -131,12 +131,11 @@
         }
     }
 
-    // Tegn opp hele grensesnittet
     function updateUI() {
         try {
             var currentYear = new Date().getFullYear();
             var activeLogs = localData.logs.filter(function(log) {
-                return new Date(log.time).getFullYear() === currentYear;
+                return new Date(log.time || Date.now()).getFullYear() === currentYear;
             });
             
             var yearlyTotal = activeLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
@@ -170,7 +169,6 @@
                 logList.innerHTML = "<li>Krukken venter på første synd...</li>";
             } else {
                 activeLogs.slice().reverse().slice(0, 5).forEach(function(log) {
-                    // Korrigert HTML-struktur uten løse avslutningstagger
                     logList.innerHTML += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span> <strong>50 kr</strong></li>";
                 });
             }
@@ -179,7 +177,6 @@
         }
     }
 
-    // Registrer ny bot lokalt og trigg sky-opplasting
     function leggTilBot() {
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
@@ -201,8 +198,9 @@
         } catch(audioErr) {}
     }
 
-    // Send data opp til sky-serveren
     function saveToCloud() {
         try {
             var xhr = new XMLHttpRequest();
             xhr.open("POST", kvdbUrl, true);
+            xhr.setRequestHeader("Content-Type", "text/plain");
+            xhr.onreadystatechange = function() {
