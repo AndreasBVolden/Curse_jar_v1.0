@@ -20,13 +20,15 @@
         button { font-weight: bold; cursor: pointer; }
         .btn-add { background: var(--accent); color: #fff; }
         .btn-email { background: var(--success); color: #fff; }
-        .btn-sync { background: #2196F3; color: #fff; }
-        .stats-row { margin-bottom: 8px; font-size: 14px; text-align: left; }
+        .btn-share { background: #4a4a4a; color: #fff; }
+        .stats-row { margin-bottom: 15px; font-size: 14px; text-align: left; }
         .stats-label { display: flex; justify-content: space-between; margin-bottom: 2px; }
         .bar-container { background: #333; width: 100%; height: 12px; border-radius: 6px; overflow: hidden; }
-        .bar-fill { background: var(--primary); height: 100%; width: 0%; }
-        .log-list { text-align: left; list-style: none; font-size: 14px; }
+        .bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.4s; }
+        .top-words { font-size: 12px; color: #aaa; margin-top: 4px; font-style: italic; padding-left: 5px; line-height: 1.4; }
+        .log-list { text-align: left; list-style: none; font-size: 14px; max-height: 120px; overflow-y: auto; }
         .log-list li { padding: 6px 0; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+        .share-zone { font-size: 12px; color: #aaa; text-align: center; margin-top: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -48,144 +50,155 @@
             <option value="Klara">Klara</option>
         </select>
         <input type="text" id="wordInput" placeholder="Hvilket ord glapp ut?">
-        <button class="btn-add" onclick="leggTilBot()">Sleng i 50 kr! 💸</button>
+        <button class="btn-add" id="addBtn" onclick="leggTilBot()">Sleng i 50 kr! 💸</button>
     </div>
 
     <div class="card">
-        <h3>📊 Oversikt over bøter</h3>
+        <h3>📊 Rangering & Toppord</h3>
         <div id="statsContainer"></div>
     </div>
 
     <div class="card">
-        <h3>📩 Synkronisering & E-post</h3>
-        <button class="btn-sync" onclick="importerData()">Importer data fra gjengen 📥</button>
+        <h3>🔗 Deling & Status</h3>
+        <button class="btn-share" onclick="delAppLenke()">Del felles app-lenke 🔗</button>
         <button class="btn-email" onclick="sendEpostRapport()">Send årsrapport til e-post 📧</button>
-        <p style="font-size: 11px; color: #aaa; margin-top: 5px;">Rapporter sendes til: andreasbvolden@gmail.com</p>
+        <div class="share-zone" id="shareStatus">Starter synkronisering...</div>
     </div>
 
     <div class="card">
         <h3>📜 Siste hendelser</h3>
         <ul class="log-list" id="logList">
-            <li>Krukken er tom.</li>
+            <li>Ingen synder registrert ennå.</li>
         </ul>
     </div>
 </div>
 
 <script>
-    // Enkel og feilsikker datastruktur
-    var data = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0, logg: [] };
+    // Sky-konfigurasjon dedikert for din felleskrukke
+    var jarId = "felles_krukke_andreas_volden_2026";
+    var kvdbUrl = "https://kvdb.io" + jarId;
+    var PENALTY = 50;
+    var TARGET_EMAIL = "andreasbvolden@gmail.com";
+    var FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
+    
+    var localData = { logs: [] };
 
-    // Hent lagrede data med en gang siden laste-lyttere kan svikte
+    // Hent lokale data umiddelbart
     try {
-        var lagret = localStorage.getItem('bannekrukke_lokal_data');
-        if (lagret) {
-            data = JSON.parse(lagret);
-        }
+        var lagret = localStorage.getItem('bannekrukke_sky_data');
+        if (lagret) localData = JSON.parse(lagret);
     } catch(e) {}
+    if (!localData || !localData.logs) localData = { logs: [] };
 
-    function oppdaterSkjerm() {
-        var totalt = data.Andreas + data.Mathilde + data.Iben + data.Klara;
+    function beregnTopp3Ord(navn) {
+        var personLogs = localData.logs.filter(function(l) {
+            return l.user === navn && l.text && l.text.toLowerCase() !== "banning";
+        });
+        if (personLogs.length === 0) return "Ingen ord registrert ennå";
+
+        var teller = {};
+        personLogs.forEach(function(l) {
+            var ord = l.text.trim();
+            teller[ord] = (teller[ord] || 0) + 1;
+        });
+
+        var sortert = Object.keys(teller).map(function(ord) {
+            return { ord: ord, antall: teller[ord] };
+        }).sort(function(a, b) { return b.antall - a.antall; });
+
+        var topp3 = sortert.slice(0, 3).map(function(item) {
+            return item.ord + " (" + item.antall + "x)";
+        });
+
+        return "🔥 Topp 3 ord: " + topp3.join(", ");
+    }
+
+    function updateUI() {
+        var currentYear = new Date().getFullYear();
+        var åretsLogs = localData.logs.filter(function(log) {
+            return new Date(log.time).getFullYear() === currentYear;
+        });
+
+        var totalt = åretsLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
         document.getElementById('totalDisplay').innerText = totalt + " kr";
         
-        // Oppdater visuell krukke
         var prosent = Math.min((totalt / 2000) * 100, 100);
         document.getElementById('jarFill').style.height = prosent + "%";
 
-        // Oppdater statistikk-barer
-        var maksBelop = Math.max(data.Andreas, data.Mathilde, data.Iben, data.Klara, 1);
-        var navnListe = ["Andreas", "Mathilde", "Iben", "Klara"];
+        var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
+        åretsLogs.forEach(function(log) {
+            if (summer[log.user] !== undefined) summer[log.user] += log.amount;
+        });
+
+        var maksBelop = Math.max(summer.Andreas, summer.Mathilde, summer.Iben, summer.Klara, 1);
         var statsHtml = "";
         
-        navnListe.forEach(function(navn) {
-            var p = (data[navn] / maksBelop) * 100;
+        FIXED_NAMES.forEach(function(name) {
+            var p = (summer[name] / maksBelop) * 100;
+            var topp3Ord = beregnTopp3Ord(name);
             statsHtml += '<div class="stats-row">' +
-                '<div class="stats-label"><span>👤 ' + navn + '</span><strong>' + data[navn] + ' kr</strong></div>' +
+                '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
                 '<div class="bar-container"><div class="bar-fill" style="width: ' + p + '%"></div></div>' +
+                '<div class="top-words">' + topp3Ord + '</div>' +
                 '</div>';
         });
         document.getElementById('statsContainer').innerHTML = statsHtml;
 
-        // Oppdater loggliste (viser de siste 5 hendelsene)
-        var loggHtml = "";
-        if (data.logg.length === 0) {
-            loggHtml = "<li>Ingen registrerte synder.</li>";
+        var logHtml = "";
+        if (åretsLogs.length === 0) {
+            logHtml = "<li>Krukken venter på første synd...</li>";
         } else {
-            var visningsLogg = data.logg.slice(-5).reverse();
-            visningsLogg.forEach(function(innslag) {
-                loggHtml += "<li><span><strong>" + innslag.navn + "</strong>: " + innslag.ord + "</span><strong>50 kr</strong></li>";
+            åretsLogs.slice().reverse().slice(0, 5).forEach(function(log) {
+                logHtml += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span><strong>50 kr</strong></li>";
             });
         }
-        document.getElementById('logList').innerHTML = loggHtml;
+        document.getElementById('logList').innerHTML = logHtml;
     }
 
     function leggTilBot() {
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
+        var tidsstempel = new Date().toISOString();
         
-        data[valgtNavn] += 50;
-        data.logg.push({ navn: valgtNavn, ord: ordet });
+        var nyLogg = { user: valgtNavn, text: ordet, amount: PENALTY, time: tidsstempel };
+        localData.logs.push(nyLogg);
         
-        try {
-            localStorage.setItem('bannekrukke_lokal_data', JSON.stringify(data));
-        } catch(e) {}
+        try { localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData)); } catch(e) {}
 
         document.getElementById('wordInput').value = "";
-        oppdaterSkjerm();
+        updateUI();
+        saveToCloud(); // Sender til skyen med en gang
     }
 
-    function sendEpostRapport() {
-        var totalt = data.Andreas + data.Mathilde + data.Iben + data.Klara;
-        var emne = encodeURIComponent("Bannekrukke - Statusrapport");
-        var tekst = "Her er status for bannekrukken:\n\n" +
-                    "TOTALT INNSAMLING: " + totalt + " kr\n" +
-                    "-----------------------------------------\n" +
-                    "👤 Andreas: " + data.Andreas + " kr\n" +
-                    "👤 Mathilde: " + data.Mathilde + " kr\n" +
-                    "👤 Iben: " + data.Iben + " kr\n" +
-                    "👤 Klara: " + data.Klara + " kr\n" +
-                    "-----------------------------------------\n" +
-                    "Generert av Bannekrukke-appen.";
-        
-        window.location.href = "mailto:andreasbvolden@://gmail.com" + emne + "&body=" + encodeURIComponent(tekst);
-    }
-
-    function importerData() {
-        var tekstInndata = prompt("Lim inn data-teksten du fikk fra et annet familiemedlem her:");
-        if (!tekstInndata) return;
+    // FEILSIKKER TEKST-SENDING: Sender alt som ren tekststreng for å unngå nettlesersperrer
+    function saveToCloud() {
         try {
-            var importert = JSON.parse(tekstInndata);
-            if (importert && importert.Andreas !== undefined) {
-                // Slå sammen verdiene (velger det høyeste beløpet eller summerer basert på behov, her overskriver vi med nyeste felles status)
-                data.Andreas = Math.max(data.Andreas, importert.Andreas);
-                data.Mathilde = Math.max(data.Mathilde, importert.Mathilde);
-                data.Iben = Math.max(data.Iben, importert.Iben);
-                data.Klara = Math.max(data.Klara, importert.Klara);
-                
-                // Slå sammen logg og fjern duplikater
-                var flettaLogg = data.logg.concat(importert.logg);
-                var unike = [];
-                var sjekk = {};
-                flettaLogg.forEach(function(item) {
-                    var nokkel = item.navn + item.ord;
-                    if (!sjekk[nokkel]) {
-                        sjekk[nokkel] = true;
-                        unike.push(item);
-                    }
-                });
-                data.logg = unike;
-
-                localStorage.setItem('bannekrukke_lokal_data', JSON.stringify(data));
-                oppdaterSkjerm();
-                alert("Krukken ble oppdatert med suksess!");
-            }
-        } catch(err) {
-            alert("Kunne ikke lese dataene. Pass på at du kopierte nøyaktig det som sto.");
-        }
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", kvdbUrl, true);
+            xhr.setRequestHeader("Content-Type", "text/plain");
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
+                }
+            };
+            xhr.send(JSON.stringify(localData));
+        } catch(e) {}
     }
 
-    // Kjør skjermoppdatering med en gang siden dataene ligger klare
-    oppdaterSkjerm();
-</script>
-
-</body>
-</html>
+    function fetchData() {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", kvdbUrl, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var cloudData = JSON.parse(xhr.responseText);
+                        if (cloudData && cloudData.logs) {
+                            // Fletter data basert på unike tidsstempler så ingen trykk slettes
+                            var kart = new Map(localData.logs.map(function(l) { return [l.time + l.user, l]; }));
+                            cloudData.logs.forEach(function(l) { kart.set(l.time + l.user, l); });
+                            
+                            localData.logs = Array.from(kart.values()).sort(function(a,b) { 
+                                return new Date(a.time) - new Date(b.time); 
+                            });
+                            
