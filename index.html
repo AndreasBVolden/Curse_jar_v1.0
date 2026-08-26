@@ -35,14 +35,14 @@
 
 <div class="container">
     <h1>🤬 Bannekrukke Eikvegen 4D</h1>
-    
+
     <div class="card">
         <div class="jar-lid"></div>
         <div class="jar-container">
             <div class="total-amount" id="totalDisplay">0 kr</div>
             <div class="jar-fill" id="jarFill"></div>
         </div>
-        
+
         <select id="nameSelect">
             <option value="Andreas">Andreas</option>
             <option value="Mathilde">Mathilde</option>
@@ -74,12 +74,20 @@
 </div>
 
 <script>
-    var jarId = "felles_krukke_andreas_volden_2026";
-    var kvdbUrl = "https://kvdb.io" + jarId;
+    // ====== SKY-OPPSETT ======
+    // Sett inn en EKTE kvdb.io bucket-ID her (ikke et selvvalgt navn - kvdb krever
+    // at bucketen opprettes på forhånd, se instruksjonene du fikk i chatten).
+    // Så lenge dette står som placeholder, kjører appen i ren lokal modus
+    // (fungerer fint på hver telefon for seg, men synker IKKE mellom familiemedlemmer).
+    var KVDB_BUCKET_ID = "St3J6gtKBDa5j6y1i22L5U";
+    var KVDB_KEY = "jardata";
+    var kvdbConfigured = KVDB_BUCKET_ID.indexOf("SETT_INN") === -1;
+    var kvdbUrl = "https://kvdb.io/" + KVDB_BUCKET_ID + "/" + KVDB_KEY;
+
     var PENALTY = 50;
     var TARGET_EMAIL = "andreasbvolden@gmail.com";
     var FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
-    
+
     var localData = { logs: [] };
     var isSyncing = false;
 
@@ -129,11 +137,11 @@
             var activeLogs = localData.logs.filter(function(log) {
                 return new Date(log.time || Date.now()).getFullYear() === currentYear;
             });
-            
+
             var yearlyTotal = activeLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
             document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
             document.getElementById('jarFill').style.height = Math.min((yearlyTotal / 2000) * 100, 100) + "%";
-            
+
             var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
             activeLogs.forEach(function(log) {
                 if (summer[log.user] !== undefined) summer[log.user] += log.amount;
@@ -141,7 +149,7 @@
 
             var maksBelop = Math.max(summer.Andreas, summer.Mathilde, summer.Iben, summer.Klara, 1);
             var statsHtml = "";
-            
+
             FIXED_NAMES.forEach(function(name) {
                 statsHtml += '<div class="stats-row">' +
                     '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
@@ -163,11 +171,15 @@
         } catch(e) {}
     }
 
+    function settStatus(tekst) {
+        try { document.getElementById('shareStatus').innerText = tekst; } catch(e) {}
+    }
+
     function leggTilBot() {
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
         var tidsstempel = new Date().toISOString();
-        
+
         localData.logs.push({
             id: tidsstempel + "_" + valgtNavn + "_" + Math.floor(Math.random() * 10000),
             user: valgtNavn,
@@ -175,7 +187,7 @@
             amount: PENALTY,
             time: tidsstempel
         });
-        
+
         try { localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData)); } catch(e) {}
         document.getElementById('wordInput').value = "";
         updateUI();
@@ -183,20 +195,26 @@
     }
 
     function saveToCloud() {
+        if (!kvdbConfigured) { settStatus("Kun lokal modus ⚙️ (ingen bucket-ID satt)"); return; }
         try {
             var xhr = new XMLHttpRequest();
             xhr.open("POST", kvdbUrl, true);
             xhr.setRequestHeader("Content-Type", "text/plain");
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        settStatus("Sky-synkronisert 🟢");
+                    } else {
+                        settStatus("Kunne ikke nå skyen 🔴 (status " + xhr.status + ")");
+                    }
                 }
             };
             xhr.send(JSON.stringify(localData));
-        } catch(e) {}
+        } catch(e) { settStatus("Kunne ikke nå skyen 🔴"); }
     }
 
     function fetchData() {
+        if (!kvdbConfigured) { settStatus("Kun lokal modus ⚙️ (ingen bucket-ID satt)"); return; }
         if (isSyncing) return;
         isSyncing = true;
         try {
@@ -207,72 +225,80 @@
                     if (xhr.status === 200) {
                         try {
                             var cloudData = JSON.parse(xhr.responseText);
-                            if (cloudData && cloudData.logs) {var kart = new Map();
-localData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
-cloudData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+                            if (cloudData && cloudData.logs) {
+                                var kart = new Map();
+                                localData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+                                cloudData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
 
-localData.logs = Array.from(kart.values()).sort(function(a, b) {
-    return new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime();
-});
+                                localData.logs = Array.from(kart.values()).sort(function(a, b) {
+                                    return new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime();
+                                });
 
-localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData));
-updateUI();
-document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
-
-} catch (err) {}
-} else if (xhr.status === 404) {
-    setTimeout(saveToCloud, 500);
-}
-isSyncing = false;
-}
-};
-xhr.send();
-} catch (e) { isSyncing = false; }
-}
-
-function sendEpostRapport() {
-    var currentYear = new Date().getFullYear();
-    var activeLogs = localData.logs.filter(function(log) {
-        return new Date(log.time || Date.now()).getFullYear() === currentYear;
-    });
-    
-    var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
-    activeLogs.forEach(function(log) {
-        if (summer[log.user] !== undefined) summer[log.user] += log.amount;
-    });
-    
-    var t = "Her er sammenstillingen for kalenderåret " + currentYear + ":\n\n" +
-            "TOTALT I KRUKKEN: " + (summer.Andreas + summer.Mathilde + summer.Iben + summer.Klara) + " kr\n" +
-            "-----------------------------------------\n";
-            
-    FIXED_NAMES.forEach(function(name) {
-        t += "👤 " + name + ": " + summer[name] + " kr | " + beregnTopp3Ord(name).replace("🔥 ", "") + "\n";
-    });
-    
-    window.location.href = "mailto:" + TARGET_EMAIL +
-        "?subject=" + encodeURIComponent("Bannekrukke - Årsrapport " + currentYear) +
-        "&body=" + encodeURIComponent(t + "-----------------------------------------\nGenerert av Bannekrukke Ultra.");
-}
-
-function delAppLenke() {
-    var shareUrl = window.location.origin + window.location.pathname + "?v=5500";
-    if (navigator.share) {
-        navigator.share({ title: 'Bli med i vår felles bannekrukke!', url: shareUrl });
-    } else {
-        navigator.clipboard.writeText(shareUrl);
-        alert("App-lenke kopiert!");
+                                localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData));
+                                updateUI();
+                            }
+                            settStatus("Sky-synkronisert 🟢");
+                        } catch (err) {
+                            settStatus("Feil ved lesing av sky-data 🔴");
+                        }
+                    } else if (xhr.status === 404) {
+                        // Nøkkelen finnes ikke ennå i bucketen - opprett den med det vi har lokalt
+                        saveToCloud();
+                    } else {
+                        settStatus("Kunne ikke nå skyen 🔴 (status " + xhr.status + ")");
+                    }
+                    isSyncing = false;
+                }
+            };
+            xhr.send();
+        } catch (e) { isSyncing = false; settStatus("Kunne ikke nå skyen 🔴"); }
     }
-}
 
-try {
-    document.getElementById('addBtn').onclick = leggTilBot;
-    document.getElementById('shareBtn').onclick = delAppLenke;
-    document.getElementById('emailBtn').onclick = sendEpostRapport;
-    document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
-    updateUI();
-    fetchData();
-    setInterval(fetchData, 5000);
-} catch (globalErr) {
-    document.getElementById('shareStatus').innerText = "Modus: Aktiv krukke 🟢";
-}
+    function sendEpostRapport() {
+        var currentYear = new Date().getFullYear();
+        var activeLogs = localData.logs.filter(function(log) {
+            return new Date(log.time || Date.now()).getFullYear() === currentYear;
+        });
 
+        var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
+        activeLogs.forEach(function(log) {
+            if (summer[log.user] !== undefined) summer[log.user] += log.amount;
+        });
+
+        var t = "Her er sammenstillingen for kalenderåret " + currentYear + ":\n\n" +
+                "TOTALT I KRUKKEN: " + (summer.Andreas + summer.Mathilde + summer.Iben + summer.Klara) + " kr\n" +
+                "-----------------------------------------\n";
+
+        FIXED_NAMES.forEach(function(name) {
+            t += "👤 " + name + ": " + summer[name] + " kr | " + beregnTopp3Ord(name).replace("🔥 ", "") + "\n";
+        });
+
+        window.location.href = "mailto:" + TARGET_EMAIL +
+            "?subject=" + encodeURIComponent("Bannekrukke - Årsrapport " + currentYear) +
+            "&body=" + encodeURIComponent(t + "-----------------------------------------\nGenerert av Bannekrukke Ultra.");
+    }
+
+    function delAppLenke() {
+        var shareUrl = window.location.origin + window.location.pathname + "?v=5500";
+        if (navigator.share) {
+            navigator.share({ title: 'Bli med i vår felles bannekrukke!', url: shareUrl });
+        } else {
+            navigator.clipboard.writeText(shareUrl);
+            alert("App-lenke kopiert!");
+        }
+    }
+
+    try {
+        document.getElementById('addBtn').onclick = leggTilBot;
+        document.getElementById('shareBtn').onclick = delAppLenke;
+        document.getElementById('emailBtn').onclick = sendEpostRapport;
+        settStatus(kvdbConfigured ? "Kobler til sky..." : "Kun lokal modus ⚙️ (ingen bucket-ID satt)");
+        updateUI();
+        fetchData();
+        if (kvdbConfigured) setInterval(fetchData, 5000);
+    } catch (globalErr) {
+        settStatus("Noe gikk galt ved oppstart 🔴");
+    }
+</script>
+</body>
+</html>
