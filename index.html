@@ -33,11 +33,6 @@
 </head>
 <body>
 
-<!-- Trygg forhåndslasting av Homer Simpson lydspor -->
-<audio id="dohAudio" preload="auto">
-    <source src="https://soundboard.com" type="audio/mpeg">
-</audio>
-
 <div class="container">
     <h1>🤬 Bannekrukke Ultra</h1>
     
@@ -67,7 +62,7 @@
         <h3>🔗 Deling & Status</h3>
         <button class="btn-share" id="shareBtn">Del felles app-lenke 🔗</button>
         <button class="btn-email" id="emailBtn">Send årsrapport til e-post 📧</button>
-        <div class="share-zone" id="shareStatus">Klargjør applikasjonen...</div>
+        <div class="share-zone" id="shareStatus">Initialiserer...</div>
     </div>
 
     <div class="card">
@@ -88,7 +83,6 @@
     var localData = { logs: [] };
     var isSyncing = false;
 
-    // Gjenopprett lokale data fra minnet øyeblikkelig
     try {
         var lagret = localStorage.getItem('bannekrukke_sky_data');
         if (lagret) localData = JSON.parse(lagret);
@@ -190,11 +184,6 @@
         document.getElementById('wordInput').value = "";
         updateUI();
         saveToCloud();
-
-        try {
-            var lyd = document.getElementById('dohAudio');
-            if (lyd) { lyd.currentTime = 0; lyd.play(); }
-        } catch(audioErr) {}
     }
 
     function saveToCloud() {
@@ -204,3 +193,17 @@
             xhr.setRequestHeader("Content-Type", "text/plain");
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status === 200) {
+                    document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
+                }
+            };
+            xhr.send(JSON.stringify(localData));
+        } catch(e) {}
+    }
+
+    function fetchData() {
+        if (isSyncing) return;
+        isSyncing = true;
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", kvdbUrl, true);
+            xhr.onreadystatechange = function() {
