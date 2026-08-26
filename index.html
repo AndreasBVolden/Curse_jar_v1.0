@@ -23,7 +23,7 @@
         .btn-share { background: #4a4a4a; color: #fff; }
         .stats-row { margin-bottom: 15px; font-size: 14px; text-align: left; }
         .stats-label { display: flex; justify-content: space-between; margin-bottom: 2px; }
-        .bar-container { background: #333; width: 100%; height: 12px; border-radius: 6px; overflow: hidden; }
+        .container-bar { background: #333; width: 100%; height: 12px; border-radius: 6px; overflow: hidden; }
         .bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.4s; }
         .top-words { font-size: 12px; color: #aaa; margin-top: 4px; font-style: italic; padding-left: 5px; line-height: 1.4; }
         .log-list { text-align: left; list-style: none; font-size: 14px; max-height: 120px; overflow-y: auto; }
@@ -89,9 +89,8 @@
     } catch(e) {}
     if (!localData || !localData.logs) localData = { logs: [] };
 
-    function genererUnikNokkel(loggInnslag) {
-        if (loggInnslag.id) return loggInnslag.id;
-        return new Date(loggInnslag.time || Date.now()).getTime() + "_" + loggInnslag.user + "_" + Math.floor(Math.random() * 1000);
+    function genererUnikNokkel(l) {
+        return l.id || (new Date(l.time || Date.now()).getTime() + "_" + l.user + "_" + Math.floor(Math.random() * 1000));
     }
 
     function beregnTopp3Ord(navn) {
@@ -133,9 +132,7 @@
             
             var yearlyTotal = activeLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
             document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
-            
-            var fillPercent = Math.min((yearlyTotal / 2000) * 100, 100);
-            document.getElementById('jarFill').style.height = fillPercent + "%";
+            document.getElementById('jarFill').style.height = Math.min((yearlyTotal / 2000) * 100, 100) + "%";
             
             var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
             activeLogs.forEach(function(log) {
@@ -146,12 +143,10 @@
             var statsHtml = "";
             
             FIXED_NAMES.forEach(function(name) {
-                var p = (summer[name] / maksBelop) * 100;
-                var topp3Ord = beregnTopp3Ord(name);
                 statsHtml += '<div class="stats-row">' +
                     '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
-                    '<div class="bar-container"><div class="bar-fill" style="width: ' + p + '%"></div></div>' +
-                    '<div class="top-words">' + topp3Ord + '</div>' +
+                    '<div class="container-bar"><div class="bar-fill" style="width: ' + ((summer[name] / maksBelop) * 100) + '%"></div></div>' +
+                    '<div class="top-words">' + beregnTopp3Ord(name) + '</div>' +
                     '</div>';
             });
             document.getElementById('statsContainer').innerHTML = statsHtml;
@@ -165,22 +160,23 @@
                     logList.innerHTML += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span> <strong>50 kr</strong></li>";
                 });
             }
-        } catch(e) {
-            console.error("UI-oppdatering feilet:", e);
-        }
+        } catch(e) {}
     }
 
     function leggTilBot() {
         var valgtNavn = document.getElementById('nameSelect').value;
         var ordet = document.getElementById('wordInput').value.trim() || "Banning";
         var tidsstempel = new Date().toISOString();
-        var unikId = tidsstempel + "_" + valgtNavn + "_" + Math.floor(Math.random() * 10000);
         
-        var nyLogg = { id: unikId, user: valgtNavn, text: ordet, amount: PENALTY, time: tidsstempel };
-        localData.logs.push(nyLogg);
+        localData.logs.push({
+            id: tidsstempel + "_" + valgtNavn + "_" + Math.floor(Math.random() * 10000),
+            user: valgtNavn,
+            text: ordet,
+            amount: PENALTY,
+            time: tidsstempel
+        });
         
         try { localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData)); } catch(e) {}
-
         document.getElementById('wordInput').value = "";
         updateUI();
         saveToCloud();
@@ -207,3 +203,76 @@
             var xhr = new XMLHttpRequest();
             xhr.open("GET", kvdbUrl, true);
             xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var cloudData = JSON.parse(xhr.responseText);
+                            if (cloudData && cloudData.logs) {var kart = new Map();
+localData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+cloudData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+
+localData.logs = Array.from(kart.values()).sort(function(a, b) {
+    return new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime();
+});
+
+localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData));
+updateUI();
+document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
+
+} catch (err) {}
+} else if (xhr.status === 404) {
+    setTimeout(saveToCloud, 500);
+}
+isSyncing = false;
+}
+};
+xhr.send();
+} catch (e) { isSyncing = false; }
+}
+
+function sendEpostRapport() {
+    var currentYear = new Date().getFullYear();
+    var activeLogs = localData.logs.filter(function(log) {
+        return new Date(log.time || Date.now()).getFullYear() === currentYear;
+    });
+    
+    var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
+    activeLogs.forEach(function(log) {
+        if (summer[log.user] !== undefined) summer[log.user] += log.amount;
+    });
+    
+    var t = "Her er sammenstillingen for kalenderåret " + currentYear + ":\n\n" +
+            "TOTALT I KRUKKEN: " + (summer.Andreas + summer.Mathilde + summer.Iben + summer.Klara) + " kr\n" +
+            "-----------------------------------------\n";
+            
+    FIXED_NAMES.forEach(function(name) {
+        t += "👤 " + name + ": " + summer[name] + " kr | " + beregnTopp3Ord(name).replace("🔥 ", "") + "\n";
+    });
+    
+    window.location.href = "mailto:" + TARGET_EMAIL +
+        "?subject=" + encodeURIComponent("Bannekrukke - Årsrapport " + currentYear) +
+        "&body=" + encodeURIComponent(t + "-----------------------------------------\nGenerert av Bannekrukke Ultra.");
+}
+
+function delAppLenke() {
+    var shareUrl = window.location.origin + window.location.pathname + "?v=5500";
+    if (navigator.share) {
+        navigator.share({ title: 'Bli med i vår felles bannekrukke!', url: shareUrl });
+    } else {
+        navigator.clipboard.writeText(shareUrl);
+        alert("App-lenke kopiert!");
+    }
+}
+
+try {
+    document.getElementById('addBtn').onclick = leggTilBot;
+    document.getElementById('shareBtn').onclick = delAppLenke;
+    document.getElementById('emailBtn').onclick = sendEpostRapport;
+    document.getElementById('shareStatus').innerText = "Modus: Sky-synkronisert 🟢";
+    updateUI();
+    fetchData();
+    setInterval(fetchData, 5000);
+} catch (globalErr) {
+    document.getElementById('shareStatus').innerText = "Modus: Aktiv krukke 🟢";
+}
+
