@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bannekrukke Ultra</title>
+    <style>
+        :root { --primary: #ffd700; --bg: #1a1a1a; --card: #2a2a2a; --text: #ffffff; --accent: #ff4757; --success: #2ed573; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { max-width: 400px; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+        h1 { text-align: center; color: var(--primary); font-size: 26px; }
+        .card { background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; }
+        h3 { margin-bottom: 12px; font-size: 18px; border-bottom: 1px solid #444; padding-bottom: 5px; color: var(--primary); text-align: left; }
+        .jar-container { position: relative; width: 140px; height: 160px; margin: 15px auto; border: 5px solid #fff; border-radius: 20px 20px 40px 40px; overflow: hidden; background: rgba(255,255,255,0.05); }
+        .jar-lid { width: 80px; height: 12px; background: #fff; margin: 0 auto -5px auto; border-radius: 5px; }
+        .jar-fill { position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(to top, #b8860b, var(--primary)); height: 0%; transition: height 0.3s; }
+        .total-amount { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 26px; font-weight: bold; color: #fff; text-shadow: 1px 1px 5px rgba(0,0,0,0.9); z-index: 10; }
+        input, select, button { width: 100%; padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; font-size: 16px; background: #333; color: #fff; }
+        button { font-weight: bold; cursor: pointer; }
+        .btn-add { background: var(--accent); color: #fff; }
+        .btn-email { background: var(--success); color: #fff; }
+        .btn-share { background: #4a4a4a; color: #fff; }
+        .stats-row { margin-bottom: 15px; font-size: 14px; text-align: left; }
+        .stats-label { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .container-bar { background: #333; width: 100%; height: 12px; border-radius: 6px; overflow: hidden; }
+        .bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.4s; }
+        .top-words { font-size: 12px; color: #aaa; margin-top: 4px; font-style: italic; padding-left: 5px; line-height: 1.4; }
+        .log-list { text-align: left; list-style: none; font-size: 14px; max-height: 120px; overflow-y: auto; }
+        .log-list li { padding: 6px 0; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+        .share-zone { font-size: 12px; color: #aaa; text-align: center; margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🤬 Bannekrukke Eikvegen 4D</h1>
+
+    <div class="card">
+        <div class="jar-lid"></div>
+        <div class="jar-container">
+            <div class="total-amount" id="totalDisplay">0 kr</div>
+            <div class="jar-fill" id="jarFill"></div>
+        </div>
+
+        <select id="nameSelect">
+            <option value="Andreas">Andreas</option>
+            <option value="Mathilde">Mathilde</option>
+            <option value="Iben">Iben</option>
+            <option value="Klara">Klara</option>
+        </select>
+        <input type="text" id="wordInput" placeholder="Hvilket ord glapp ut?">
+        <button class="btn-add" id="addBtn">Sleng i 50 kr! 💸</button>
+    </div>
+
+    <div class="card">
+        <h3>📊 Rangering & Toppord</h3>
+        <div id="statsContainer"></div>
+    </div>
+
+    <div class="card">
+        <h3>🔗 Deling & Status</h3>
+        <button class="btn-share" id="shareBtn">Del felles app-lenke 🔗</button>
+        <button class="btn-email" id="emailBtn">Send årsrapport til e-post 📧</button>
+        <div class="share-zone" id="shareStatus">Initialiserer...</div>
+    </div>
+
+    <div class="card">
+        <h3>📜 Siste hendelser</h3>
+        <ul class="log-list" id="logList">
+            <li>Ingen synder registrert ennå.</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    // ====== SKY-OPPSETT ======
+    // Sett inn en EKTE kvdb.io bucket-ID her (ikke et selvvalgt navn - kvdb krever
+    // at bucketen opprettes på forhånd, se instruksjonene du fikk i chatten).
+    // Så lenge dette står som placeholder, kjører appen i ren lokal modus
+    // (fungerer fint på hver telefon for seg, men synker IKKE mellom familiemedlemmer).
+    var KVDB_BUCKET_ID = "St3J6gtKBDa5j6y1i22L5U";
+    var KVDB_KEY = "jardata";
+    var kvdbConfigured = KVDB_BUCKET_ID.indexOf("SETT_INN") === -1;
+    var kvdbUrl = "https://kvdb.io/" + KVDB_BUCKET_ID + "/" + KVDB_KEY;
+
+    var PENALTY = 50;
+    var TARGET_EMAIL = "andreasbvolden@gmail.com";
+    var FIXED_NAMES = ["Andreas", "Mathilde", "Iben", "Klara"];
+
+    var localData = { logs: [] };
+    var isSyncing = false;
+
+    try {
+        var lagret = localStorage.getItem('bannekrukke_sky_data');
+        if (lagret) localData = JSON.parse(lagret);
+    } catch(e) {}
+    if (!localData || !localData.logs) localData = { logs: [] };
+
+    function genererUnikNokkel(l) {
+        return l.id || (new Date(l.time || Date.now()).getTime() + "_" + l.user + "_" + Math.floor(Math.random() * 1000));
+    }
+
+    function beregnTopp3Ord(navn) {
+        try {
+            var personLogs = localData.logs.filter(function(l) {
+                return l.user === navn && l.text && l.text.toLowerCase() !== "banning";
+            });
+            if (personLogs.length === 0) return "Ingen ord registrert ennå";
+
+            var teller = {};
+            personLogs.forEach(function(l) {
+                var ord = l.text.trim().toLowerCase();
+                if (ord) teller[ord] = (teller[ord] || 0) + 1;
+            });
+
+            var nokler = Object.keys(teller);
+            if (nokler.length === 0) return "Ingen ord registrert ennå";
+
+            var sortert = nokler.map(function(ord) {
+                return { ord: ord, antall: teller[ord] };
+            }).sort(function(a, b) { return b.antall - a.antall; });
+
+            var topp3 = sortert.slice(0, 3).map(function(item) {
+                return item.ord + " (" + item.antall + "x)";
+            });
+
+            return "🔥 Topp 3 ord: " + topp3.join(", ");
+        } catch(e) {
+            return "Ingen ord registrert ennå";
+        }
+    }
+
+    function updateUI() {
+        try {
+            var currentYear = new Date().getFullYear();
+            var activeLogs = localData.logs.filter(function(log) {
+                return new Date(log.time || Date.now()).getFullYear() === currentYear;
+            });
+
+            var yearlyTotal = activeLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
+            document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
+            document.getElementById('jarFill').style.height = Math.min((yearlyTotal / 2000) * 100, 100) + "%";
+
+            var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
+            activeLogs.forEach(function(log) {
+                if (summer[log.user] !== undefined) summer[log.user] += log.amount;
+            });
+
+            var maksBelop = Math.max(summer.Andreas, summer.Mathilde, summer.Iben, summer.Klara, 1);
+            var statsHtml = "";
+
+            FIXED_NAMES.forEach(function(name) {
+                statsHtml += '<div class="stats-row">' +
+                    '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
+                    '<div class="container-bar"><div class="bar-fill" style="width: ' + ((summer[name] / maksBelop) * 100) + '%"></div></div>' +
+                    '<div class="top-words">' + beregnTopp3Ord(name) + '</div>' +
+                    '</div>';
+            });
+            document.getElementById('statsContainer').innerHTML = statsHtml;
+
+            var logList = document.getElementById('logList');
+            logList.innerHTML = "";
+            if (activeLogs.length === 0) {
+                logList.innerHTML = "<li>Krukken venter på første synd...</li>";
+            } else {
+                activeLogs.slice().reverse().slice(0, 5).forEach(function(log) {
+                    logList.innerHTML += "<li><span><strong>" + log.user + "</strong>: " + log.text + "</span> <strong>50 kr</strong></li>";
+                });
+            }
+        } catch(e) {}
+    }
+
+    function settStatus(tekst) {
+        try { document.getElementById('shareStatus').innerText = tekst; } catch(e) {}
+    }
+
+    function leggTilBot() {
+        var valgtNavn = document.getElementById('nameSelect').value;
+        var ordet = document.getElementById('wordInput').value.trim() || "Banning";
+        var tidsstempel = new Date().toISOString();
+
+        localData.logs.push({
+            id: tidsstempel + "_" + valgtNavn + "_" + Math.floor(Math.random() * 10000),
+            user: valgtNavn,
+            text: ordet,
+            amount: PENALTY,
+            time: tidsstempel
+        });
+
+        try { localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData)); } catch(e) {}
+        document.getElementById('wordInput').value = "";
+        updateUI();
+        saveToCloud();
+    }
+
+    function saveToCloud() {
+        if (!kvdbConfigured) { settStatus("Kun lokal modus ⚙️ (ingen bucket-ID satt)"); return; }
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", kvdbUrl, true);
+            xhr.setRequestHeader("Content-Type", "text/plain");
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        settStatus("Sky-synkronisert 🟢");
+                    } else {
+                        settStatus("Kunne ikke nå skyen 🔴 (status " + xhr.status + ")");
+                    }
+                }
+            };
+            xhr.send(JSON.stringify(localData));
+        } catch(e) { settStatus("Kunne ikke nå skyen 🔴"); }
+    }
+
+    function fetchData() {
+        if (!kvdbConfigured) { settStatus("Kun lokal modus ⚙️ (ingen bucket-ID satt)"); return; }
+        if (isSyncing) return;
+        isSyncing = true;
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", kvdbUrl, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var cloudData = JSON.parse(xhr.responseText);
+                            if (cloudData && cloudData.logs) {
+                                var kart = new Map();
+                                localData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+                                cloudData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+
+                                localData.logs = Array.from(kart.values()).sort(function(a, b) {
+                                    return new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime();
+                                });
+
+                                localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData));
+                                updateUI();
+                            }
+                            settStatus("Sky-synkronisert 🟢");
+                        } catch (err) {
+                            settStatus("Feil ved lesing av sky-data 🔴");
+                        }
+                    } else if (xhr.status === 404) {
+                        // Nøkkelen finnes ikke ennå i bucketen - opprett den med det vi har lokalt
+                        saveToCloud();
+                    } else {
+                        settStatus("Kunne ikke nå skyen 🔴 (status " + xhr.status + ")");
+                    }
+                    isSyncing = false;
+                }
+            };
+            xhr.send();
+        } catch (e) { isSyncing = false; settStatus("Kunne ikke nå skyen 🔴"); }
+    }
+
+    function sendEpostRapport() {
+        var currentYear = new Date().getFullYear();
+        var activeLogs = localData.logs.filter(function(log) {
+            return new Date(log.time || Date.now()).getFullYear() === currentYear;
+        });
+
+        var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
+        activeLogs.forEach(function(log) {
+            if (summer[log.user] !== undefined) summer[log.user] += log.amount;
+        });
+
+        var t = "Her er sammenstillingen for kalenderåret " + currentYear + ":\n\n" +
+                "TOTALT I KRUKKEN: " + (summer.Andreas + summer.Mathilde + summer.Iben + summer.Klara) + " kr\n" +
+                "-----------------------------------------\n";
+
+        FIXED_NAMES.forEach(function(name) {
+            t += "👤 " + name + ": " + summer[name] + " kr | " + beregnTopp3Ord(name).replace("🔥 ", "") + "\n";
+        });
+
+        window.location.href = "mailto:" + TARGET_EMAIL +
+            "?subject=" + encodeURIComponent("Bannekrukke - Årsrapport " + currentYear) +
+            "&body=" + encodeURIComponent(t + "-----------------------------------------\nGenerert av Bannekrukke Ultra.");
+    }
+
+    function delAppLenke() {
+        var shareUrl = window.location.origin + window.location.pathname + "?v=5500";
+        if (navigator.share) {
+            navigator.share({ title: 'Bli med i vår felles bannekrukke!', url: shareUrl });
+        } else {
+            navigator.clipboard.writeText(shareUrl);
+            alert("App-lenke kopiert!");
+        }
+    }
+
+    try {
+        document.getElementById('addBtn').onclick = leggTilBot;
+        document.getElementById('shareBtn').onclick = delAppLenke;
+        document.getElementById('emailBtn').onclick = sendEpostRapport;
+        settStatus(kvdbConfigured ? "Kobler til sky..." : "Kun lokal modus ⚙️ (ingen bucket-ID satt)");
+        updateUI();
+        fetchData();
+        if (kvdbConfigured) setInterval(fetchData, 5000);
+    } catch (globalErr) {
+        settStatus("Noe gikk galt ved oppstart 🔴");
+    }
+</script>
+</body>
+</html>
