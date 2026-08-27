@@ -155,15 +155,28 @@
             });
 
             var maksBelop = Math.max(summer.Andreas, summer.Mathilde, summer.Iben, summer.Klara, 1);
+            // Sjekker hvem som faktisk har dette beløpet (og som har mer enn 0 kr)
+            var ledere = [];
+            FIXED_NAMES.forEach(function(navn) {
+                if (summer[navn] === maksBelop && summer[navn] > 0) {
+                    ledere.push(navn);
+                }
+            });
             var statsHtml = "";
 
             FIXED_NAMES.forEach(function(name) {
+                var p = (summer[name] / maksBelop) * 100;
+    
+                // Legger til en krone hvis personen leder krukkestatistikken
+                var krone = (ledere.indexOf(name) !== -1) ? " 👑" : "";
+                
                 statsHtml += '<div class="stats-row">' +
-                    '<div class="stats-label"><span>👤 ' + name + '</span><strong>' + summer[name] + ' kr</strong></div>' +
-                    '<div class="container-bar"><div class="bar-fill" style="width: ' + ((summer[name] / maksBelop) * 100) + '%"></div></div>' +
+                    '<div class="stats-label"><span>👤 ' + name + krone + '</span><strong>' + summer[name] + ' kr</strong></div>' +
+                    '<div class="container-bar"><div class="bar-fill" style="width: ' + p + '%"></div></div>' +
                     '<div class="top-words">' + beregnTopp3Ord(name) + '</div>' +
                     '</div>';
             });
+            
             document.getElementById('statsContainer').innerHTML = statsHtml;
 
             var logList = document.getElementById('logList');
