@@ -73,17 +73,23 @@
     </div>
 </div>
 
-<script src="https://unpkg.com/kvdb.io@v1.0"></script>
-<script>
-    // ====== SKY-OPPSETT ======
-    // Sett inn en EKTE kvdb.io bucket-ID her (ikke et selvvalgt navn - kvdb krever
-    // at bucketen opprettes på forhånd, se instruksjonene du fikk i chatten).
-    // Så lenge dette står som placeholder, kjører appen i ren lokal modus
-    // (fungerer fint på hver telefon for seg, men synker IKKE mellom familiemedlemmer).
-    var KVDB_BUCKET_ID = "St3J6gtKBDa5j6y1i22L5U";
-    var KVDB_KEY = "jardata";
-    var kvdbConfigured = KVDB_BUCKET_ID.indexOf("SETT_INN") === -1;
-    var bucket = (kvdbConfigured && typeof KVdb !== "undefined") ? KVdb.bucket(KVDB_BUCKET_ID) : null;
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+    import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
+
+    // ====== SKY-OPPSETT (Firebase Realtime Database) ======
+    var firebaseConfig = {
+        apiKey: "AIzaSyBr5EhiGJmOD6VfcGALglAaRmdtegMdds8",
+        authDomain: "bannekrukke.firebaseapp.com",
+        databaseURL: "https://bannekrukke-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "bannekrukke",
+        storageBucket: "bannekrukke.firebasestorage.app",
+        messagingSenderId: "195466723471",
+        appId: "1:195466723471:web:94a32fc6580acec0f530fa"
+    };
+    var firebaseApp = initializeApp(firebaseConfig);
+    var db = getDatabase(firebaseApp);
+    var jarRef = ref(db, "jardata");
 
     var PENALTY = 50;
     var TARGET_EMAIL = "andreasbvolden@gmail.com";
@@ -196,8 +202,7 @@
     }
 
     function saveToCloud() {
-        if (!kvdbConfigured || !bucket) { settStatus("Kun lokal modus ⚙️ (ingen bucket-ID satt)"); return; }
-        bucket.set(KVDB_KEY, JSON.stringify(localData)).then(function() {
+        set(jarRef, localData).then(function() {
             settStatus("Sky-synkronisert 🟢");
         }).catch(function(err) {
             settStatus("Kunne ikke nå skyen 🔴");
@@ -206,37 +211,33 @@
     }
 
     function fetchData() {
-        if (!kvdbConfigured || !bucket) { settStatus("Kun lokal modus ⚙️ (ingen bucket-ID satt)"); return; }
         if (isSyncing) return;
         isSyncing = true;
-        bucket.get(KVDB_KEY).then(function(value) {
+        get(jarRef).then(function(snapshot) {
             isSyncing = false;
-            if (value) {
-                try {
-                    var cloudData = (typeof value === "string") ? JSON.parse(value) : value;
-                    if (cloudData && cloudData.logs) {
-                        var kart = new Map();
-                        localData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
-                        cloudData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+            if (snapshot.exists()) {
+                var cloudData = snapshot.val();
+                if (cloudData && cloudData.logs) {
+                    var kart = new Map();
+                    localData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
+                    cloudData.logs.forEach(function(l) { kart.set(genererUnikNokkel(l), l); });
 
-                        localData.logs = Array.from(kart.values()).sort(function(a, b) {
-                            return new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime();
-                        });
+                    localData.logs = Array.from(kart.values()).sort(function(a, b) {
+                        return new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime();
+                    });
 
-                        localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData));
-                        updateUI();
-                    }
-                } catch (err) {}
+                    localStorage.setItem('bannekrukke_sky_data', JSON.stringify(localData));
+                    updateUI();
+                }
                 settStatus("Sky-synkronisert 🟢");
             } else {
-                // Ingen verdi ennå - opprett nøkkelen med det vi har lokalt
+                // Ingen data i skyen ennå - opprett med det vi har lokalt
                 saveToCloud();
             }
         }).catch(function(err) {
             isSyncing = false;
-            // Sannsynligvis finnes ikke nøkkelen ennå (første gang) - opprett den
-            console.error("fetchData feilet, prøver å opprette nøkkel:", err);
-            saveToCloud();
+            settStatus("Kunne ikke nå skyen 🔴");
+            console.error("fetchData feilet:", err);
         });
     }
 
@@ -278,10 +279,10 @@
         document.getElementById('addBtn').onclick = leggTilBot;
         document.getElementById('shareBtn').onclick = delAppLenke;
         document.getElementById('emailBtn').onclick = sendEpostRapport;
-        settStatus(kvdbConfigured ? "Kobler til sky..." : "Kun lokal modus ⚙️ (ingen bucket-ID satt)");
+        settStatus("Kobler til sky...");
         updateUI();
         fetchData();
-        if (kvdbConfigured) setInterval(fetchData, 5000);
+        setInterval(fetchData, 5000);
     } catch (globalErr) {
         settStatus("Noe gikk galt ved oppstart 🔴");
     }
