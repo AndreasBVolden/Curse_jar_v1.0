@@ -40,6 +40,7 @@
         <div class="jar-lid"></div>
         <div class="jar-container">
             <div class="total-amount" id="totalDisplay">0 kr</div>
+            <div style="font-size: 13px; color: #aaa; margin-top: 190px;" id="yearTotalDisplay">Årstotal: 0 kr</div>
             <div class="jar-fill" id="jarFill"></div>
         </div>
 
@@ -51,6 +52,7 @@
         </select>
         <input type="text" id="wordInput" placeholder="Hvilket ord glapp ut?">
         <button class="btn-add" id="addBtn">Sleng i 50 kr! 💸</button>
+        <button style="background: #4a4a4a; color: #fff; font-size: 13px; padding: 8px; margin-top: 5px;" id="undoBtn">Angre siste trykk ↩️</button>
     </div>
 
     <div class="card">
@@ -137,7 +139,30 @@
             return "Ingen ord registrert ennå";
         }
     }
+    function angreSisteTrykk() {
+        if (localData.logs.length === 0) {
+            alert("Krukken er allerede tom, ingenting å angre!");
+            return;
+        }
+        
+        if (confirm("Er du sikker på at du vil slette det aller siste registrerte banneordet fra krukken?")) {
+            // Sletter det siste elementet fra listen
+            localData.logs.pop();
+            
+            // Oppdaterer grensesnittet med en gang
+            updateUI();
+            
+            // Sender de oppdaterte dataene opp til Firebase
+            set(jarRef, localData)
+                .then(function() { alert("Siste trykk ble slettet fra skyen! 🟢"); })
+                .catch(function(e) { console.error("Kunne ikke oppdatere skyen:", e); });
+        }
+    }
 
+    // Binder angre-funksjonen til den nye knappen
+    document.getElementById('undoBtn').onclick = angreSisteTrykk;
+
+    
     function updateUI() {
         try {
             var currentYear = new Date().getFullYear();
@@ -147,6 +172,9 @@
 
             var yearlyTotal = activeLogs.reduce(function(sum, log) { return sum + log.amount; }, 0);
             document.getElementById('totalDisplay').innerText = yearlyTotal + " kr";
+            // Henter og viser den akkumulerte totalsummen for hele året
+            document.getElementById('yearTotalDisplay').innerText = "Årstotal i krukken: " + yearlyTotal + " kr";
+
             document.getElementById('jarFill').style.height = Math.min((yearlyTotal / 2000) * 100, 100) + "%";
 
             var summer = { Andreas: 0, Mathilde: 0, Iben: 0, Klara: 0 };
